@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: fichas-tecnicas-intela
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: FICHAS_PASSWORD
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
