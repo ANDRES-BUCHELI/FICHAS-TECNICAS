@@ -7,27 +7,50 @@
          placeholder="Buscar por nombre...">
 </div>
 
-{% for fam in familias %}
-<h6 class="mt-4 mb-2"><span class="familia-badge">{{ fam }}</span></h6>
-<div class="row g-3" data-familia-block>
-  {% for f in fichas if f.familia == fam %}
-  <div class="col-sm-6 col-md-4 col-lg-3" data-nombre="{{ f.nombre|lower }}">
-    <div class="card ficha-card h-100">
-      <div class="card-body d-flex flex-column">
-        <div class="fw-semibold mb-2"><i class="bi bi-file-earmark-richtext text-primary me-1"></i>{{ f.nombre }}</div>
-        <div class="mt-auto d-flex gap-2">
-          <a class="btn btn-sm btn-primary flex-fill" target="_blank" href="{{ url_for('ver', archivo=f.pdf) }}">
-            <i class="bi bi-eye me-1"></i>Ver / Imprimir
-          </a>
-          {% if f.docx %}
-          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('descargar', archivo=f.docx) }}" title="Descargar Word">
-            <i class="bi bi-file-earmark-word"></i>
-          </a>
-          {% endif %}
+<ul class="nav nav-pills mb-4" id="tipo-tabs">
+  <li class="nav-item">
+    <button class="nav-link active" data-tipo-btn="todas" type="button">
+      Todas <span class="badge text-bg-light ms-1">{{ fichas|length }}</span>
+    </button>
+  </li>
+  {% for tipo in tipos %}
+  <li class="nav-item">
+    <button class="nav-link" data-tipo-btn="{{ tipo }}" type="button">
+      {{ tipo_label[tipo] }} <span class="badge text-bg-light ms-1">{{ conteo_tipo[tipo] }}</span>
+    </button>
+  </li>
+  {% endfor %}
+</ul>
+
+{% for tipo in tipos %}
+<div data-tipo-section="{{ tipo }}">
+  <h5 class="mb-3"><span class="tipo-badge tipo-{{ tipo }}">{{ tipo_label[tipo] }}</span></h5>
+  {% for fam in familias %}
+    {% set cards = fichas|selectattr('tipo','equalto',tipo)|selectattr('familia','equalto',fam)|list %}
+    {% if cards %}
+    <h6 class="mt-3 mb-2"><span class="familia-badge">{{ fam }}</span></h6>
+    <div class="row g-3 mb-3" data-familia-block>
+      {% for f in cards %}
+      <div class="col-sm-6 col-md-4 col-lg-3" data-nombre="{{ f.nombre|lower }}" data-tipo="{{ f.tipo }}">
+        <div class="card ficha-card h-100">
+          <div class="card-body d-flex flex-column">
+            <div class="fw-semibold mb-2"><i class="bi bi-file-earmark-richtext text-primary me-1"></i>{{ f.nombre }}</div>
+            <div class="mt-auto d-flex gap-2">
+              <a class="btn btn-sm btn-primary flex-fill" target="_blank" href="{{ url_for('ver', tipo=f.tipo, archivo=f.pdf) }}">
+                <i class="bi bi-eye me-1"></i>Ver / Imprimir
+              </a>
+              {% if f.docx %}
+              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('descargar', tipo=f.tipo, archivo=f.docx) }}" title="Descargar Word">
+                <i class="bi bi-file-earmark-word"></i>
+              </a>
+              {% endif %}
+            </div>
+          </div>
         </div>
       </div>
+      {% endfor %}
     </div>
-  </div>
+    {% endif %}
   {% endfor %}
 </div>
 {% endfor %}
@@ -38,26 +61,58 @@
 {% endblock %}
 
 {% block scripts %}
+<style>
+  .tipo-badge { font-size: .85rem; padding: 4px 12px; border-radius: 6px; color: #fff; font-weight: 600; }
+  .tipo-badge.tipo-tubular { background: #1F4E79; }
+  .tipo-badge.tipo-abierto { background: #B5651D; }
+  #tipo-tabs .nav-link { color: #1F4E79; }
+  #tipo-tabs .nav-link.active { background: #1F4E79; color: #fff; }
+</style>
 <script>
 const buscador = document.getElementById('buscador');
 const tarjetas = Array.from(document.querySelectorAll('[data-nombre]'));
 const bloques = Array.from(document.querySelectorAll('[data-familia-block]'));
+const secciones = Array.from(document.querySelectorAll('[data-tipo-section]'));
+const botones = Array.from(document.querySelectorAll('[data-tipo-btn]'));
 const sinResultados = document.getElementById('sin-resultados');
 
-buscador.addEventListener('input', () => {
+let tipoActivo = 'todas';
+
+function aplicarFiltros() {
   const q = buscador.value.trim().toLowerCase();
   let visibles = 0;
+
   tarjetas.forEach(t => {
-    const match = t.dataset.nombre.includes(q);
-    t.classList.toggle('d-none', !match);
-    if (match) visibles++;
+    const coincideTexto = t.dataset.nombre.includes(q);
+    const coincideTipo = tipoActivo === 'todas' || t.dataset.tipo === tipoActivo;
+    const mostrar = coincideTexto && coincideTipo;
+    t.classList.toggle('d-none', !mostrar);
+    if (mostrar) visibles++;
   });
+
   bloques.forEach(b => {
     const algunaVisible = b.querySelectorAll('[data-nombre]:not(.d-none)').length > 0;
     b.previousElementSibling.classList.toggle('d-none', !algunaVisible);
     b.classList.toggle('d-none', !algunaVisible);
   });
+
+  secciones.forEach(s => {
+    const seccionVisible = tipoActivo === 'todas' || s.dataset.tipoSection === tipoActivo;
+    s.classList.toggle('d-none', !seccionVisible);
+  });
+
   sinResultados.classList.toggle('d-none', visibles !== 0);
+}
+
+buscador.addEventListener('input', aplicarFiltros);
+
+botones.forEach(btn => {
+  btn.addEventListener('click', () => {
+    botones.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    tipoActivo = btn.dataset.tipoBtn;
+    aplicarFiltros();
+  });
 });
 </script>
 {% endblock %}

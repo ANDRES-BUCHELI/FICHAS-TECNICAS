@@ -15,6 +15,8 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-cambiar-en-produccion")
 FICHAS_PASSWORD = os.environ.get("FICHAS_PASSWORD", "intela2026")
 
+TIPOS = ["tubular", "abierto"]
+TIPO_LABEL = {"tubular": "Tubular", "abierto": "Abierto"}
 FAMILIAS = ["Jersey", "Fleece", "Pique", "Ribb", "Topper"]
 
 
@@ -37,20 +39,29 @@ def familia_de(nombre):
 
 
 def listar_fichas():
-    archivos = sorted(f for f in os.listdir(PDF_DIR) if f.lower().endswith(".pdf"))
+    """Devuelve todas las fichas, con su tipo (tubular/abierto), agrupables por familia."""
     fichas = []
-    for f in archivos:
-        stem = os.path.splitext(f)[0]
-        nombre = nombre_legible(stem)
-        docx_name = stem + ".docx"
-        tiene_docx = os.path.exists(os.path.join(DOCX_DIR, docx_name))
-        fichas.append({
-            "pdf": f,
-            "docx": docx_name if tiene_docx else None,
-            "nombre": nombre,
-            "familia": familia_de(nombre),
-        })
-    fichas.sort(key=lambda x: (x["familia"], x["nombre"]))
+    for tipo in TIPOS:
+        pdf_dir_tipo = os.path.join(PDF_DIR, tipo)
+        docx_dir_tipo = os.path.join(DOCX_DIR, tipo)
+        if not os.path.isdir(pdf_dir_tipo):
+            continue
+        for f in sorted(os.listdir(pdf_dir_tipo)):
+            if not f.lower().endswith(".pdf"):
+                continue
+            stem = os.path.splitext(f)[0]
+            nombre = nombre_legible(stem)
+            docx_name = stem + ".docx"
+            tiene_docx = os.path.exists(os.path.join(docx_dir_tipo, docx_name))
+            fichas.append({
+                "pdf": f,
+                "docx": docx_name if tiene_docx else None,
+                "nombre": nombre,
+                "familia": familia_de(nombre),
+                "tipo": tipo,
+                "tipo_label": TIPO_LABEL[tipo],
+            })
+    fichas.sort(key=lambda x: (x["tipo"], x["familia"], x["nombre"]))
     return fichas
 
 
@@ -86,28 +97,39 @@ def logout():
 def index():
     fichas = listar_fichas()
     familias = sorted(set(f["familia"] for f in fichas))
-    return render_template("index.html", fichas=fichas, familias=familias)
+    conteo_tipo = {t: sum(1 for f in fichas if f["tipo"] == t) for t in TIPOS}
+    return render_template("index.html", fichas=fichas, familias=familias,
+                            tipos=TIPOS, tipo_label=TIPO_LABEL, conteo_tipo=conteo_tipo)
 
 
-@app.route("/ver/<path:archivo>")
+def _tipo_valido(tipo):
+    if tipo not in TIPOS:
+        abort(404)
+
+
+@app.route("/ver/<tipo>/<path:archivo>")
 @login_required
-def ver(archivo):
+def ver(tipo, archivo):
+    _tipo_valido(tipo)
     if not archivo.lower().endswith(".pdf") or "/" in archivo or "\\" in archivo:
         abort(404)
-    if not os.path.exists(os.path.join(PDF_DIR, archivo)):
+    carpeta = os.path.join(PDF_DIR, tipo)
+    if not os.path.exists(os.path.join(carpeta, archivo)):
         abort(404)
-    return send_from_directory(PDF_DIR, archivo, as_attachment=False,
+    return send_from_directory(carpeta, archivo, as_attachment=False,
                                 mimetype="application/pdf")
 
 
-@app.route("/descargar/<path:archivo>")
+@app.route("/descargar/<tipo>/<path:archivo>")
 @login_required
-def descargar(archivo):
+def descargar(tipo, archivo):
+    _tipo_valido(tipo)
     if not archivo.lower().endswith(".docx") or "/" in archivo or "\\" in archivo:
         abort(404)
-    if not os.path.exists(os.path.join(DOCX_DIR, archivo)):
+    carpeta = os.path.join(DOCX_DIR, tipo)
+    if not os.path.exists(os.path.join(carpeta, archivo)):
         abort(404)
-    return send_from_directory(DOCX_DIR, archivo, as_attachment=True)
+    return send_from_directory(carpeta, archivo, as_attachment=True)
 
 
 if __name__ == "__main__":
